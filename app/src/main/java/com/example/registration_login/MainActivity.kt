@@ -1,5 +1,8 @@
 package com.example.registration_login
+
+import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -8,48 +11,52 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Icon
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var dbHelper: DBHelper
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d("myLogs", "--- MainActivity onCreate ---")
+        dbHelper = DBHelper(this)
         setContent {
-            SalonAuthScreen()
+            SalonAuthScreen(dbHelper)
         }
     }
 }
-@Preview
+
 @Composable
-fun SalonAuthScreen() {
-    var isLogin by remember { mutableStateOf(true) } // режим входа
+fun SalonAuthScreen(dbHelper: DBHelper) {
+    var isLogin by remember { mutableStateOf(true) }
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    // Розовая палитра
+    var message by remember { mutableStateOf("") }
+
     val pinkPrimary = Color(0xFFE91E63)
     val pinkDark = Color(0xFFC2185B)
     val pinkLight = Color(0xFFF8BBD0)
+
+    val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
@@ -58,7 +65,6 @@ fun SalonAuthScreen() {
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
-        // затемняющимй слой
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -79,14 +85,12 @@ fun SalonAuthScreen() {
                 color = Color.White,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
-
             Text(
                 text = "Салон красоты",
                 fontSize = 16.sp,
                 color = Color.White.copy(alpha = 0.9f),
                 modifier = Modifier.padding(bottom = 32.dp)
             )
-            // карта с формой
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -97,7 +101,6 @@ fun SalonAuthScreen() {
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                // заголовок формы
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -110,9 +113,8 @@ fun SalonAuthScreen() {
                         color = pinkDark,
                         modifier = Modifier.padding(bottom = 20.dp)
                     )
-                    // для регистрации
+
                     if (!isLogin) {
-                        // поле ввода, программа получает через состояние
                         OutlinedTextField(
                             value = name,
                             onValueChange = { name = it },
@@ -127,6 +129,7 @@ fun SalonAuthScreen() {
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                     }
+
                     OutlinedTextField(
                         value = phone,
                         onValueChange = { phone = it },
@@ -154,6 +157,7 @@ fun SalonAuthScreen() {
                         )
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
@@ -169,12 +173,15 @@ fun SalonAuthScreen() {
                             focusedLabelColor = pinkPrimary,
                             unfocusedBorderColor = pinkLight
                         ),
-                        // переключение видимости пароля
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
-                                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = if (passwordVisible) "Скрыть пароль" else "Показать пароль",
+                                    imageVector = if (passwordVisible)
+                                        Icons.Default.Visibility
+                                    else
+                                        Icons.Default.VisibilityOff,
+                                    contentDescription = if (passwordVisible)
+                                        "Скрыть пароль" else "Показать пароль",
                                     tint = Color.Black
                                 )
                             }
@@ -182,16 +189,45 @@ fun SalonAuthScreen() {
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
-                        // войти зарегистрироваться
+
                     Button(
-                        onClick = { /* Действие */ },
+                        onClick = {
+                            if (isLogin) {
+                                val userName = dbHelper.loginUser(email, password)
+                                if (userName != null) {
+                                    dbHelper.increaseLoginCount(userName)
+                                    Log.d("myLogs", "login success: $userName")
+                                    context.startActivity(
+                                        Intent(context, StatsActivity::class.java)
+                                    )
+                                } else {
+                                    Log.d("myLogs", "login failed for $email")
+                                    message = "Неверный email или пароль"
+                                }
+                            } else {
+                                if (name.isBlank() || email.isBlank() || password.isBlank()) {
+                                    message = "Заполните все поля"
+                                } else {
+                                    val ok = dbHelper.registerUser(name, phone, email, password)
+                                    Log.d("myLogs", "register result = $ok for $email")
+                                    if (ok) {
+                                        // Сразу после регистрации — на статистику
+                                        dbHelper.increaseLoginCount(name)
+                                        Log.d("myLogs", "registration success, go to StatsActivity")
+                                        context.startActivity(
+                                            Intent(context, StatsActivity::class.java)
+                                        )
+                                    } else {
+                                        message = "Email уже занят"
+                                    }
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = pinkPrimary
-                        )
+                        colors = ButtonDefaults.buttonColors(containerColor = pinkPrimary)
                     ) {
                         Text(
                             text = if (isLogin) "ВОЙТИ" else "ЗАРЕГИСТРИРОВАТЬСЯ",
@@ -201,8 +237,13 @@ fun SalonAuthScreen() {
                         )
                     }
 
+                    if (message.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = message, color = Color.Red, fontSize = 14.sp)
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    // Переключение между входом и регистрацией
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
@@ -213,7 +254,10 @@ fun SalonAuthScreen() {
                             fontSize = 14.sp,
                             color = Color.Gray
                         )
-                        TextButton(onClick = { isLogin = !isLogin }) {
+                        TextButton(onClick = {
+                            isLogin = !isLogin
+                            message = ""
+                        }) {
                             Text(
                                 text = if (isLogin) "Регистрация" else "Войти",
                                 fontSize = 14.sp,
